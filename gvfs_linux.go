@@ -59,8 +59,8 @@ func Unmount(ctx context.Context, uri string) error {
 
 // Mount mounts uri, an smb://host[:port]/share, dav://host[:port]/path or
 // davs:// location, and returns where it is reachable: the gvfs-fuse path
-// (/run/user/<uid>/gvfs/...), or the mount's default location when gvfs-fuse
-// is not running. The user and password answer the daemon's AskPassword call
+// (/run/user/<uid>/gvfs/...), or uri itself when gvfs-fuse is not serving the
+// session (the location then opens through GIO, not through os calls). The user and password answer the daemon's AskPassword call
 // directly: no dialog appears. A user written DOMAIN\name carries its
 // domain. An already mounted location is not an error; its path is returned.
 //
@@ -75,7 +75,7 @@ func (c *Client) Mount(ctx context.Context, uri, user, password string) (mountPa
 	if m, err := c.find(ctx, loc); err != nil {
 		return "", err
 	} else if m != nil {
-		return m.path(), nil
+		return m.path(uri), nil
 	}
 	domain, name := splitUser(user)
 	h := &opHandler{user: name, domain: domain, password: password}
@@ -100,7 +100,7 @@ func (c *Client) Mount(ctx context.Context, uri, user, password string) (mountPa
 	if m == nil {
 		return "", fmt.Errorf("gvfs: mounted, but the mount tracker does not list %q", uri)
 	}
-	return m.path(), nil
+	return m.path(uri), nil
 }
 
 // Unmount unmounts uri. It returns ErrNotMounted when nothing is mounted

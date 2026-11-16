@@ -228,13 +228,15 @@ func (l *location) matches(m *dbusMount) bool {
 }
 
 // path is where the mount is reachable: the FUSE path gvfs-fuse exposes
-// (/run/user/<uid>/gvfs/...), or, when gvfs-fuse is not running, the mount's
-// default location, or failing that the empty string.
-func (m *dbusMount) path() string {
+// (/run/user/<uid>/gvfs/...), or, when gvfs-fuse is not serving the session,
+// uri. The mount's DefaultLocation is not a substitute: it is the root INSIDE
+// the mount, and measured on Ubuntu 24.04 it is "/", which read as a path is
+// the host's root directory (go-fileshare/automount live run, 2026-11-16).
+func (m *dbusMount) path(uri string) string {
 	if p := fromCstr(m.FusePath); p != "" {
 		return p
 	}
-	return fromCstr(m.DefaultLocation)
+	return uri
 }
 
 // splitUser separates DOMAIN\user into its domain and user.

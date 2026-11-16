@@ -134,16 +134,15 @@ func TestMatches(t *testing.T) {
 
 func TestPath(t *testing.T) {
 	m := &dbusMount{FusePath: cstr("/run/user/1000/gvfs/x"), DefaultLocation: cstr("smb://h/s")}
-	if got := m.path(); got != "/run/user/1000/gvfs/x" {
+	if got := m.path("smb://h/s"); got != "/run/user/1000/gvfs/x" {
 		t.Errorf("fuse path = %q", got)
 	}
+	// Without gvfs-fuse the default location is "/" (the root inside the
+	// mount, measured on Ubuntu 24.04); it must not be returned as a path.
 	m.FusePath = cstr("")
-	if got := m.path(); got != "smb://h/s" {
-		t.Errorf("default location = %q", got)
-	}
-	m.DefaultLocation = nil
-	if got := m.path(); got != "" {
-		t.Errorf("empty = %q", got)
+	m.DefaultLocation = cstr("/")
+	if got := m.path("smb://h/s"); got != "smb://h/s" {
+		t.Errorf("no fuse: path = %q, want the URI", got)
 	}
 }
 
