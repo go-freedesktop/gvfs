@@ -271,8 +271,8 @@ func TestMountFallbackPaths(t *testing.T) {
 	f.mu.Lock()
 	f.mounts[0].FusePath = cstr("")
 	f.mu.Unlock()
-	if p, _ := c.Mount(ctx(t), "smb://h/s", "u", "p"); p != "smb://x/y" {
-		t.Errorf("default location path = %q", p)
+	if p, _ := c.Mount(ctx(t), "smb://h/s", "u", "p"); p != "smb://h/s" {
+		t.Errorf("no-fuse path = %q, want the URI (DefaultLocation is the root inside the mount)", p)
 	}
 }
 

@@ -33,8 +33,11 @@ err = gvfs.Unmount(ctx, "smb://127.0.0.1:4455/share")
 | `Unmount(ctx, uri) error` | unmounts; `ErrNotMounted` when nothing is mounted there |
 | `NewClient(conn)` | the same two methods on a session-bus connection you own |
 
-`mountPath` is the gvfs-fuse path (`/run/user/<uid>/gvfs/...`), or the mount's
-default location when gvfs-fuse is not running.
+`mountPath` is the gvfs-fuse path (`/run/user/<uid>/gvfs/...`), or the URI you
+passed when gvfs-fuse is not serving the session (the location then opens
+through GIO, not through `os` calls). The mount's own "default location" is not
+used: it is the root inside the mount, `/` on Ubuntu 24.04, which as a path
+would be the host's root directory.
 
 - `user` may be written `DOMAIN\name`. Credentials in the URI are refused
   (`ErrInvalidURI`): they are arguments, so they never sit in a string that
