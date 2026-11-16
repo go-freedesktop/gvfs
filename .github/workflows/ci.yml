@@ -1,0 +1,147 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOWORK: "off"
+
+jobs:
+  # Vet, build, and enforce a 100% statement-coverage gate. On Linux the unit
+  # tests run against a fake gvfs daemon on a private dbus-daemon, which this
+  # job installs and then REQUIRES (GVFS_REQUIRE_BUS): a runner without it must
+  # fail, not skip into a green. The test that needs a real GNOME session
+  # (real/, GVFS_REAL=1) cannot run on a hosted runner; it is vetted below.
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # CGO_ENABLED belongs in env, not in front of the command.
+    # `- run: CGO_ENABLED=0 go vet ./...` is a POSIX-shell assignment, and the
+    # Windows runner uses PowerShell, which reads it as a command it cannot
+    # find: "The term 'CGO_ENABLED=0' is not recognized". That is the whole
+    # reason this job never ran on Windows. go-freedesktop/x11 already sets it
+    # this way.
+    env:
+      CGO_ENABLED: "0"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.3"
+      - run: go version
+      - name: Vet
+        run: go vet ./...
+      - name: Build (all packages)
+        run: go build ./...
+      - name: Install dbus-daemon
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y dbus
+      - name: Test + 100% coverage gate
+        # -race requires cgo, so enable it for THIS step only; every other
+        # step stays CGO-free.
+        env:
+          CGO_ENABLED: "1"
+          GVFS_REQUIRE_BUS: ${{ runner.os == 'Linux' && '1' || '' }}
+        shell: bash
+        run: |
+          go test -race -covermode=atomic -coverpkg=./ -coverprofile=cover.out ./...
+          go tool cover -func=cover.out | tail -n 30
+          cov=$(go tool cover -func=cover.out | awk '/^total:/{print $3}' | tr -d '%')
+          echo "coverage: ${cov}%"
+          awk -v p="$cov" 'BEGIN { exit (p+0 < 100.0) ? 1 : 0 }' || {
+            echo "::error::coverage ${cov}% < 100%"; exit 1; }
+
+  # The six supported 64-bit targets. amd64/arm64 run the suite natively; the
+  # rest run it under qemu-user. All CGO-free.
+  arch-native:
+    name: arch ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, label: amd64 }
+          - { os: ubuntu-24.04-arm, label: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.3"
+      - run: CGO_ENABLED=0 go test ./...
+
+  arch-qemu:
+    name: arch ${{ matrix.goarch }} (qemu)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goarch: riscv64, qemu: qemu-riscv64-static }
+          - { goarch: loong64, qemu: qemu-loongarch64-static }
+          - { goarch: ppc64le, qemu: qemu-ppc64le-static }
+          - { goarch: s390x, qemu: qemu-s390x-static }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.3"
+      # ⛔ `qemu-user-static` is a VIRTUAL package on Ubuntu 26.04, which
+      # `ubuntu-latest` became on 2026-10-19, and apt refuses to choose between its
+      # two providers:
+      #
+      #   E: Package 'qemu-user-static' has no installation candidate
+      #
+      # ⚠ Installing a provider is NOT the fix: `qemu-user-binfmt` registers binfmt
+      # handlers, it does not ship the `qemu-<arch>-static` binaries this lane
+      # invokes. `qemu-user` ships the dynamic `qemu-<arch>`, which is all that
+      # `go test -exec` needs, so both are installed and BOTH NAMES are accepted
+      # below. go-tex/engine#645 has the full account.
+      - name: install qemu user-mode emulators
+        timeout-minutes: 10
+        run: sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-binfmt
+      - name: Test under qemu (${{ matrix.goarch }})
+        run: |
+          base="${{ matrix.qemu }}"
+          q=""
+          for cand in "$base" "${base%-static}"; do
+            command -v "$cand" >/dev/null 2>&1 && q="$cand" && break
+          done
+          # ⛔ A missing emulator FAILS this lane. A lane that reports success for
+          # an architecture it never ran is the one outcome this matrix exists to
+          # rule out.
+          if [ -z "$q" ]; then
+            echo "::error::no qemu user emulator for ${{ matrix.goarch }} (looked for $base and ${base%-static})"
+            exit 1
+          fi
+          # Printed on purpose: without it, "ran under emulation" and "skipped" are
+          # indistinguishable from a green tick.
+          echo "running ${{ matrix.goarch }} under $q"
+          CGO_ENABLED=0 GOARCH=${{ matrix.goarch }} go test -exec="$q" ./...
+
+  # The real-mount test lives in its own module (it serves an SMB share from
+  # go-filesystems/smb). It needs a GNOME session, so CI only proves it
+  # compiles and vets; GVFS_REAL=1 runs it on a Linux desktop.
+  real-compiles:
+    name: real (compile)
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.3"
+      - name: Vet the real-mount module
+        working-directory: real
+        run: go vet ./...
