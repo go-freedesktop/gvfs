@@ -107,10 +107,8 @@ func newFakeDaemon(t *testing.T, addr string) *fakeDaemon {
 func (f *fakeDaemon) ListMounts2(userVisibleOnly bool) ([]dbusMount, *dbus.Error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.mounts == nil {
-		return []dbusMount{}, nil
-	}
-	return f.mounts, nil
+	// A copy: godbus encodes the reply after this returns, outside the lock.
+	return append([]dbusMount{}, f.mounts...), nil
 }
 
 // MountLocation behaves like the daemon: it asks the source for a password,
