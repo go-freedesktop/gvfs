@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
       - run: go version
       - name: Vet
         run: go vet ./...
@@ -77,7 +77,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
       - run: CGO_ENABLED=0 go test ./...
 
   arch-qemu:
@@ -95,7 +95,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
       # ⛔ `qemu-user-static` is a VIRTUAL package on Ubuntu 26.04, which
       # `ubuntu-latest` became on 2026-10-19, and apt refuses to choose between its
       # two providers:
@@ -141,7 +141,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
       - name: Vet the real-mount module
         working-directory: real
         run: go vet ./...
